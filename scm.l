@@ -1,14 +1,21 @@
-;;; A little Scheme in Common/Emacs Lisp v0.1 R01.12.08 by SUZUKI Hisao
+;;; A little Scheme in Common/Emacs Lisp
+;;;      v0.2 R01.12.08/R01.12.10 by SUZUKI Hisao
 
 (if (symbol-plist 'emacs-version)
-    (require 'cl)
+    (progn
+      (require 'cl)
+      (defmacro defconstant (NAME VALUE)
+	`(defconst ,NAME ,VALUE))
+      (defconstant in-emacs-lisp t)
+      (defun ~% (STRING)
+	"Replace each ~ with % in STRING."
+	(replace-regexp-in-string "~" "%" STRING)))
   (progn
-    (defmacro assq (KEY LIST)
-      `(assoc ,KEY ,LIST :test #'eq))
-    (defun read-minibuffer (prompt)
-      (princ prompt)
-      (force-output)
-      (read))))
+    (defun assq (KEY LIST)
+      (assoc KEY LIST :test #'eq))
+    (defconstant in-emacs-lisp nil)
+    (defun ~% (STRING)
+      STRING)))
 
 ;; Environment: ((symbol . value)...)
 ;; (assq 'v env) returns (v . value) or nil.
@@ -54,8 +61,11 @@
   "Subroutine, i.e. Intrinsic function"
   name arity fun)
 
-(defun __ (name arity fun)
-  (cons name (make-Subr :name name :arity arity :fun fun)))
+(defun __ (NAME ARITY FUN)
+  (cons NAME (make-Subr :name NAME :arity ARITY :fun FUN)))
+
+(defun __bool (X)
+  (if X :True :False))
 
 (defvar *global-env*
   (list
@@ -63,35 +73,29 @@
    (__ 'car 1 #'car)
    (__ 'cdr 1 #'cdr)
    (__ 'cons 2 #'cons)
-   (__ 'eq? 2 (lambda (x y) (or (eq x y)
-				:False)))
-   (__ 'pair? 1 (lambda (x) (or (consp x)
-				:False)))
-   (__ 'null? 1 (lambda (x) (or (null x)
-				:False)))
-   (__ 'not 1 (lambda (x) (or (eq x :False)
-			      :False)))
+   (__ 'eq? 2 (lambda (x y) (__bool (eq x y))))
+   (__ 'pair? 1 (lambda (x) (__bool (consp x))))
+   (__ 'null? 1 (lambda (x) (__bool (null x))))
+   (__ 'not 1 (lambda (x) (__bool (eq x :False))))
    (__ 'list -1 #'list)
    (__ 'display 1 (lambda (x) (princ x)
 		    :None))
    (__ 'newline 0 (lambda () (terpri)
 		    :None))
-   (__ 'read 0 (lambda () (read-minibuffer "")))
-   (__ 'symbol? 1 (lambda (x) (or (and (symbolp x) (not (keywordp x)))
-				  :False)))
+   (__ 'read 0 (lambda () (read-expression "")))
+   (__ 'symbol? 1 (lambda (x) (__bool (and (symbolp x) (not (keywordp x))))))
    (__ '+ 2 #'+)
    (__ '- 2 #'-)
    (__ '* 2 #'*)
    (__ '< 2 #'<)
-   (__ '= 2 (lambda (x y) (or (= x y)
-			      :False)))
+   (__ '= 2 (lambda (x y) (__bool (= x y))))
    (cons 'call/cc 'call/cc)
    (cons 'apply 'apply)))
 
 ;;----------------------------------------------------------------------
 
 (defun evaluate (EXP ENV)
-  "Evaluates an expression EXP in an environment ENV."
+  "Evaluate an expression EXP in an environment ENV."
   (let ((k (make-Continuation)))
     (loop
      (loop named Loop1 do
@@ -130,7 +134,7 @@
 	    (t				; a number, #t, #f etc.
 	     (return-from Loop1))))
      (loop named Loop2 do
-	   ;;(print k)
+	   ;; (print k)
 	   (if (has-no-steps k)
 	       (return EXP))
 	   (let* ((step (pop-Step k))
@@ -156,6 +160,9 @@
 		;; (car ENV) should be nil here.
 		(setf (cdr ENV)
 		      (cons (cons x EXP) (cdr ENV)))
+		(setq EXP :None))
+	       ((:Setq)			; x = (v . e)
+		(setf (cdr x) EXP)
 		(setq EXP :None))
 	       ((:Apply)		; x = arg...; EXP = function
 		(if (null x)
@@ -184,19 +191,19 @@
 		       (setq EXP (car pair)
 			     ENV (cdr pair))))
 		    (otherwise
-		     (error "unexpected op: ~s" op)))))
+		     (error (~% "unexpected op: ~s") op)))))
 	       ((:RestoreEnv)		; x = environment
 		(setq ENV x))
 	       (otherwise
-		(error "bar op: ~s" op))))))))
+		(error (~% "bad op: ~s") op))))))))
 
 
 (defun apply-function (FUN ARG K ENV)
-  "Applies a function FUN to arguments ARG with a continuation K.
+  "Apply a function FUN to arguments ARG with a continuation K.
    ENV will be referred to push RestoreEnvOp to the continuation."
   (loop named L1 do
 	(cond ((eq FUN 'call/cc)
-	       (push-ResotreEnv K ENV)
+	       (push-RestoreEnv K ENV)
 	       (setq FUN (car ARG))
 	       (let ((cont (make-Continuation)))
 		 (copy-from K cont)
@@ -209,7 +216,7 @@
   (cond ((Subr-p FUN)
 	   (if (and (>= (Subr-arity FUN) 0)
 		    (/= (Subr-arity FUN) (length ARG)))
-	       (error "arity not matched ~s ~s" FUN ARG))
+	       (error (~% "arity not matched ~s ~s") FUN ARG))
 	   (cons (apply (Subr-fun FUN) ARG)
 		 ENV))
 	((Expr-p FUN)
@@ -224,12 +231,64 @@
 	 (cons (car ARG)
 	       ENV))
 	(t
-	 (error "not a function ~s ~s" FUN ARG))))
+	 (error (~% "not a function ~s ~s") FUN ARG))))
 
 ;;----------------------------------------------------------------------
 
-(loop
- (let ((result (evaluate (read-minibuffer "> ") *global-env*)))
-   (unless (eq result :None)
-     (prin1 result)
-     (terpri))))
+(defun repl ()
+  "Read-Eval-Print Loop"
+  (loop
+   (let ((result (evaluate (read-expression "> ") *global-env*)))
+     (unless (eq result :None)
+       (prin1 result)
+       (terpri)))))
+
+(if in-emacs-lisp
+    (progn
+      (defun read-expression (prompt)
+	"Read an expression from the standard-in."
+	(let ((ss "")
+	      (result nil)
+	      (ps prompt)
+	      (cont t))
+	  (while cont
+	    (let ((s (read-string ps)))
+	      (setq s (replace-regexp-in-string "#t\\b" ":True" s))
+	      (setq s (replace-regexp-in-string "#f\\b" ":False" s))
+	      (setq ss (concat ss "\n" s)))
+	    (setq cont nil
+		  ps "")
+	    (condition-case nil
+		(setq result (read ss))
+	      (end-of-file
+	       (setq cont t))))
+	  result))
+
+      (condition-case err
+	  (repl)
+	(error
+	 (if (string= (cadr err) "Error reading from stdin")
+	     (princ "Goodbye\n")
+	   (prin1 err)
+	   (terpri)
+	   (kill-emacs 1)))))
+  (progn
+    ;; #t will be read as :True; #f will be read as :False.
+    (eval (read-from-string "
+    (set-dispatch-macro-character #\\# #\\t
+				  #'(lambda (stream ch n) :True))"))
+    (eval (read-from-string "
+    (set-dispatch-macro-character #\\# #\\f
+				  #'(lambda (stream ch n) :False))"))
+
+    (defun read-expression (prompt)
+      "Read an expression from the standard-in."
+      (princ prompt)
+      (force-output)
+      (read))
+
+    (handler-case
+	(repl)
+      (end-of-file (c)
+		   (princ "Goodbye")
+		   (terpri)))))

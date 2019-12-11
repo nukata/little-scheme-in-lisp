@@ -1,5 +1,5 @@
 ;;; A little Scheme in Common/Emacs Lisp
-;;;      v0.2 R01.12.08/R01.12.10 by SUZUKI Hisao
+;;;      v0.2.1 R01.12.08/R01.12.11 by SUZUKI Hisao
 
 (if (symbol-plist 'emacs-version)
     (progn
@@ -28,10 +28,6 @@
   "Scheme's step in a continuation"
   op val)
 
-(defun has-no-steps (K)
-  "Return t if K is an empty continuation."
-  (null (Continuation-stack K)))
-
 (defun push-Step (OP VAL K)
   "Push a step of OP and VAL to a continuation K."
   (push (make-SStep :op OP :val VAL) (Continuation-stack K)))
@@ -39,10 +35,6 @@
 (defun pop-Step (K)
   "Pop a step from a continuation K."
   (pop (Continuation-stack K)))
-
-(defun copy-from (OTHER K)
-  "Copy an OTHER continuation to K."
-  (setf (Continuation-stack K) (copy-list (Continuation-stack OTHER))))
 
 (defun push-RestoreEnv (ENV K)
   "Push :RestoreEnv to a continuation K unless on a tail call."
@@ -134,8 +126,8 @@
 	    (t				; a number, #t, #f etc.
 	     (return-from Loop1))))
      (loop named Loop2 do
-	   ;; (print k)
-	   (if (has-no-steps k)
+	   ;; (princ " _") (princ (length (Continuation-stack k)))
+	   (if (null (Continuation-stack k))
 	       (return EXP))
 	   (let* ((step (pop-Step k))
 		  (op (SStep-op step))
@@ -203,11 +195,10 @@
    ENV will be referred to push RestoreEnvOp to the continuation."
   (loop named L1 do
 	(cond ((eq FUN 'call/cc)
-	       (push-RestoreEnv K ENV)
+	       (push-RestoreEnv ENV K)
 	       (setq FUN (car ARG))
-	       (let ((cont (make-Continuation)))
-		 (copy-from K cont)
-		 (setq ARG (list cont))))
+	       (setq ARG (list (make-Continuation
+				:stack (Continuation-stack K)))))
 	      ((eq FUN 'apply)
 	       (setq FUN (car ARG))
 	       (setq ARG (cadr ARG)))
@@ -227,7 +218,7 @@
 		     (pairlis (Expr-params FUN) ARG
 			      (Expr-env FUN)))))
 	((Continuation-p FUN)
-	 (copy-from FUN K)
+	 (setf (Continuation-stack K) (copy-list (Continuation-stack FUN)))
 	 (cons (car ARG)
 	       ENV))
 	(t

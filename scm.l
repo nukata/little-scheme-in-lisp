@@ -1,5 +1,5 @@
 ;;; A little Scheme in Common/Emacs Lisp
-;;;      v0.2.1 R01.12.08/R01.12.11 by SUZUKI Hisao
+;;;      v0.2.2 R01.12.08/R01.12.20 by SUZUKI Hisao
 
 (if (symbol-plist 'emacs-version)
     (progn
@@ -79,7 +79,7 @@
    (__ '+ 2 #'+)
    (__ '- 2 #'-)
    (__ '* 2 #'*)
-   (__ '< 2 #'<)
+   (__ '< 2 (lambda (x y) (__bool (< x y))))
    (__ '= 2 (lambda (x y) (__bool (= x y))))
    (cons 'call/cc 'call/cc)
    (cons 'apply 'apply)))

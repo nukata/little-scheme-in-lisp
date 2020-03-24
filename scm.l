@@ -1,24 +1,16 @@
-;;; A little Scheme in Common/Emacs Lisp
-;;;      v0.2.2 R01.12.08/R01.12.20 by SUZUKI Hisao
+;;; A little Scheme in Common Lisp v0.3 R01.12.08/R02.03.25 by SUZUKI Hisao
 
-(if (symbol-plist 'emacs-version)
-    (progn
-      (require 'cl)
-      (defmacro defconstant (NAME VALUE)
-	`(defconst ,NAME ,VALUE))
-      (defconstant in-emacs-lisp t)
-      (defun ~% (STRING)
-	"Replace each ~ with % in STRING."
-	(replace-regexp-in-string "~" "%" STRING)))
-  (progn
-    (defun assq (KEY LIST)
-      (assoc KEY LIST :test #'eq))
-    (defconstant in-emacs-lisp nil)
-    (defun ~% (STRING)
-      STRING)))
+(defconstant +command-line-args+
+  (or #+CLISP *args*
+      #+SBCL (cdr *posix-argv*)
+      nil))
 
 ;; Environment: ((symbol . value)...)
-;; (assq 'v env) returns (v . value) or nil.
+;; (look-up 'v env) returns (v . value)
+
+(defun look-up (KEY LIST)
+  (or (assoc KEY LIST :test #'eq)
+      (error "~:A not found" KEY)))
 
 (defstruct Continuation
   "Scheme's contiuation"
@@ -59,30 +51,44 @@
 (defun __bool (X)
   (if X :True :False))
 
-(defvar *global-env*
-  (list
-   nil					; marker of the frame top
-   (__ 'car 1 #'car)
-   (__ 'cdr 1 #'cdr)
-   (__ 'cons 2 #'cons)
-   (__ 'eq? 2 (lambda (x y) (__bool (eq x y))))
-   (__ 'pair? 1 (lambda (x) (__bool (consp x))))
-   (__ 'null? 1 (lambda (x) (__bool (null x))))
-   (__ 'not 1 (lambda (x) (__bool (eq x :False))))
-   (__ 'list -1 #'list)
-   (__ 'display 1 (lambda (x) (princ x)
-		    :None))
-   (__ 'newline 0 (lambda () (terpri)
-		    :None))
-   (__ 'read 0 (lambda () (read-expression "")))
-   (__ 'symbol? 1 (lambda (x) (__bool (and (symbolp x) (not (keywordp x))))))
-   (__ '+ 2 #'+)
-   (__ '- 2 #'-)
-   (__ '* 2 #'*)
-   (__ '< 2 (lambda (x y) (__bool (< x y))))
-   (__ '= 2 (lambda (x y) (__bool (= x y))))
-   (cons 'call/cc 'call/cc)
-   (cons 'apply 'apply)))
+(defvar *global-env* nil)
+
+(defun globals ()
+  "Return a list of symbols of the global environment."
+  (reverse (mapcar #'car (cdr *global-env*)))) ; take cdr to skip the marker.
+
+(setq *global-env*
+      (list
+       nil				; marker of the frame top
+       (__ 'car 1 #'car)
+       (__ 'cdr 1 #'cdr)
+       (__ 'cons 2 #'cons)
+       (__ 'eq? 2 (lambda (x y) (__bool (eq x y))))
+       (__ 'eqv? 2 (lambda (x y) (__bool (if (and (numberp x) (numberp y))
+					     (= x y)
+					   (eql x y)))))
+       (__ 'pair? 1 (lambda (x) (__bool (consp x))))
+       (__ 'null? 1 (lambda (x) (__bool (null x))))
+       (__ 'not 1 (lambda (x) (__bool (eq x :False))))
+       (__ 'list -1 #'list)
+       (__ 'display 1 (lambda (x) (princ x)
+			:None))
+       (__ 'newline 0 (lambda () (terpri)
+			:None))
+       (__ 'read 0 (lambda () (read-expression "")))
+       (__ 'eof-object? 1 (lambda (x) (__bool (eq x :EOF))))
+       (__ 'symbol? 1 (lambda (x) (__bool (and (symbolp x)
+					       (not (null x))
+					       (not (keywordp x))))))
+       (__ '+ 2 #'+)
+       (__ '- 2 #'-)
+       (__ '* 2 #'*)
+       (__ '< 2 (lambda (x y) (__bool (< x y))))
+       (__ '= 2 (lambda (x y) (__bool (= x y))))
+       (__ 'error 2 (lambda (x y) (error (format nil "Error: ~:A: ~:S" x y))))
+       (__ 'globals 0 #'globals)
+       (cons 'call/cc 'call/cc)
+       (cons 'apply 'apply)))
 
 ;;----------------------------------------------------------------------
 
@@ -115,18 +121,18 @@
 		  (push-Step :Define (car kdr) k))
 		 ((set!)		; (set! v e)
 		  (setq EXP (cadr kdr))
-		  (push-Step :Setq (assq (car kdr) ENV) k))
+		  (push-Step :Setq (look-up (car kdr) ENV) k))
 		 (otherwise		; (fun arg...)
 		  (setq EXP kar)
 		  (push-Step :Apply kdr k)))))
 	    ((and (symbolp EXP)
 		  (not (keywordp EXP)))
-	     (setq EXP (cdr (assq EXP ENV)))
+	     (setq EXP (cdr (look-up EXP ENV)))
 	     (return-from Loop1))
 	    (t				; a number, #t, #f etc.
 	     (return-from Loop1))))
      (loop named Loop2 do
-	   ;; (princ " _") (princ (length (Continuation-stack k)))
+	   ;; (princ "_") (princ (length (Continuation-stack k)))
 	   (if (null (Continuation-stack k))
 	       (return EXP))
 	   (let* ((step (pop-Step k))
@@ -183,11 +189,11 @@
 		       (setq EXP (car pair)
 			     ENV (cdr pair))))
 		    (otherwise
-		     (error (~% "unexpected op: ~s") op)))))
+		     (error "unexpected op: ~:S" op)))))
 	       ((:RestoreEnv)		; x = environment
 		(setq ENV x))
 	       (otherwise
-		(error (~% "bad op: ~s") op))))))))
+		(error "bad op: ~:S" op))))))))
 
 
 (defun apply-function (FUN ARG K ENV)
@@ -207,7 +213,7 @@
   (cond ((Subr-p FUN)
 	   (if (and (>= (Subr-arity FUN) 0)
 		    (/= (Subr-arity FUN) (length ARG)))
-	       (error (~% "arity not matched ~s ~s") FUN ARG))
+	       (error "arity not matched ~:S ~:S" FUN ARG))
 	   (cons (apply (Subr-fun FUN) ARG)
 		 ENV))
 	((Expr-p FUN)
@@ -222,64 +228,49 @@
 	 (cons (car ARG)
 	       ENV))
 	(t
-	 (error (~% "not a function ~s ~s") FUN ARG))))
+	 (error "not a function ~:S ~:S" FUN ARG))))
 
 ;;----------------------------------------------------------------------
 
-(defun repl ()
-  "Read-Eval-Print Loop"
-  (loop
-   (let ((result (evaluate (read-expression "> ") *global-env*)))
-     (unless (eq result :None)
-       (prin1 result)
-       (terpri)))))
+;; #t will be read as :True; #f will be read as :False.
+(set-dispatch-macro-character #\# #\t
+			      #'(lambda (stream ch n) :True))
+(set-dispatch-macro-character #\# #\f
+			      #'(lambda (stream ch n) :False))
 
-(if in-emacs-lisp
-    (progn
-      (defun read-expression (prompt)
-	"Read an expression from the standard-in."
-	(let ((ss "")
-	      (result nil)
-	      (ps prompt)
-	      (cont t))
-	  (while cont
-	    (let ((s (read-string ps)))
-	      (setq s (replace-regexp-in-string "#t\\b" ":True" s))
-	      (setq s (replace-regexp-in-string "#f\\b" ":False" s))
-	      (setq ss (concat ss "\n" s)))
-	    (setq cont nil
-		  ps "")
-	    (condition-case nil
-		(setq result (read ss))
-	      (end-of-file
-	       (setq cont t))))
-	  result))
+(defun read-expression (prompt)
+  "Read an expression from the standard input."
+  (princ prompt)
+  (force-output)
+  (read t nil :EOF))
 
-      (condition-case err
-	  (repl)
-	(error
-	 (if (string= (cadr err) "Error reading from stdin")
-	     (princ "Goodbye\n")
-	   (prin1 err)
-	   (terpri)
-	   (kill-emacs 1)))))
+(defun read-eval-print-loop ()
+  "Repeat Read-Eval-Print until End-Of-File."
+  (loop named L1 do
+	(handler-case
+	    (let ((exp (read-expression "> ")))
+	      (when (eq exp :EOF)
+		(format t "Goodbye~%")
+		(return-from L1))
+	      (let ((result (evaluate exp *global-env*)))
+		(unless (eq result :None)
+		  (format t "~:S~%" result))))
+	  (error (c)
+		 (format t "* ~:A~%" c)))))
+
+(defun load-scheme-script (FILENAME)
+  "Load a Scheme script from the file named FILENAME."
+  (with-open-file (rf FILENAME)
+		  (loop named L1 do
+			(let ((exp (read rf nil :EOF)))
+			  (if (eq exp :EOF)
+			      (return-from L1))
+			  (evaluate exp *global-env*)))))
+
+;; The main routine
+(if (null +command-line-args+)
+    (read-eval-print-loop)
   (progn
-    ;; #t will be read as :True; #f will be read as :False.
-    (eval (read-from-string "
-    (set-dispatch-macro-character #\\# #\\t
-				  #'(lambda (stream ch n) :True))"))
-    (eval (read-from-string "
-    (set-dispatch-macro-character #\\# #\\f
-				  #'(lambda (stream ch n) :False))"))
-
-    (defun read-expression (prompt)
-      "Read an expression from the standard-in."
-      (princ prompt)
-      (force-output)
-      (read))
-
-    (handler-case
-	(repl)
-      (end-of-file (c)
-		   (princ "Goodbye")
-		   (terpri)))))
+    (load-scheme-script (car +command-line-args+))
+    (if (equal "-" (cadr +command-line-args+))
+	(read-eval-print-loop))))

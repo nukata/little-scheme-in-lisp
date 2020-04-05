@@ -1,7 +1,7 @@
 # A Little Scheme in Common Lisp
 
 This is a small interpreter of a subset of Scheme.
-It runs on CLISP 2.49 and SBCL 2.0.2.
+It runs on CLISP 2.49, SBCL 2.0.3, ECL 16.1.3, GCL 2.6.12 and ABCL 1.6.0.
 It implements almost the same language as
 
 - [little-scheme-in-crystal](https://github.com/nukata/little-scheme-in-crystal)
@@ -70,7 +70,7 @@ Put a "`-`" after the script in the command line to begin a session
 after running the script.
 
 ```
-$ sbcl --script ../little-scheme/examples/fib90.scm -
+$ sbcl --script scm.l ../little-scheme/examples/fib90.scm -
 2880067194370816120
 > (globals)
 (APPLY CALL/CC GLOBALS ERROR = < * - + SYMBOL? EOF-OBJECT? READ NEWLINE

@@ -1,8 +1,12 @@
-;;; A little Scheme in Common Lisp v0.3 R01.12.08/R02.03.25 by SUZUKI Hisao
+;;; A little Scheme in Common Lisp v0.3.1 R01.12.08/R02.04.05 by SUZUKI Hisao
 
 (defconstant +command-line-args+
-  (or #+CLISP *args*
-      #+SBCL (cdr *posix-argv*)
+  (or #+CLISP *args*			; clisp scm.l
+      #+SBCL (cdr *posix-argv*)		; sbcl --script scm.l
+      #+ECL (cdddr (ext:command-args))	; ecl --shell scm.l
+      #+GCL (cdr si::*command-args*)	; gcl -f scm.l
+      #+ABCL extensions:*command-line-argument-list*
+					; abcl --batch --noinform --load scm.l
       nil))
 
 ;; Environment: ((symbol . value)...)

@@ -9,6 +9,7 @@ It implements almost the same language as
 - [little-scheme-in-dart](https://github.com/nukata/little-scheme-in-dart)
 - [little-scheme-in-go](https://github.com/nukata/little-scheme-in-go)
 - [little-scheme-in-java](https://github.com/nukata/little-scheme-in-java)
+- [little-scheme-in-kotlin](https://github.com/nukata/little-scheme-in-kotlin)
 - [little-scheme-in-php](https://github.com/nukata/little-scheme-in-php)
 - [little-scheme-in-python](https://github.com/nukata/little-scheme-in-python)
 - [little-scheme-in-ruby](https://github.com/nukata/little-scheme-in-ruby)
@@ -73,8 +74,8 @@ after running the script.
 $ sbcl --script scm.l ../little-scheme/examples/fib90.scm -
 2880067194370816120
 > (globals)
-(APPLY CALL/CC GLOBALS ERROR = < * - + SYMBOL? EOF-OBJECT? READ NEWLINE
-         DISPLAY LIST NOT NULL? PAIR? EQV? EQ? CONS CDR CAR FIBONACCI)
+(GLOBALS ERROR NUMBER? = < * - + APPLY CALL/CC SYMBOL? EOF-OBJECT? READ
+           NEWLINE DISPLAY LIST NOT NULL? PAIR? EQ? CONS CDR CAR FIBONACCI)
 > (fibonacci 16)
 987
 > (fibonacci 1000)
@@ -84,8 +85,51 @@ $ sbcl --script scm.l ../little-scheme/examples/fib90.scm -
 > 
 ```
 
-For expression types and built-in procedures of this Scheme, see
-[little-scheme](https://github.com/nukata/little-scheme).
+
+## The implemented language
+
+### Expression types
+
+- _v_  [variable reference]
+
+- (_e0_ _e1_...)  [procedure call]
+
+- (`quote` _e_)  
+  `'`_e_ [transformed into (`quote` _e_) when read]
+
+- (`if` _e1_ _e2_ _e3_)  
+  (`if` _e1_ _e2_)
+
+- (`begin` _e_...)
+
+- (`lambda` (_v_...) _e_...)
+
+- (`set!` _v_ _e_)
+
+- (`define` _v_ _e_)
+
+For simplicity, this Scheme treats (`define` _v_ _e_) as an expression type.
+
+
+### Built-in procedures
+
+|                   |                          |                 |
+|:------------------|:-------------------------|:----------------|
+| (`car` _lst_)     | (`display` _x_)          | (`+` _n1_ _n2_) |
+| (`cdr` _lst_)     | (`newline`)              | (`-` _n1_ _n2_) |
+| (`cons` _x_ _y_)  | (`read`)                 | (`*` _n1_ _n2_) |
+| (`eq?` _x_ _y_)   | (`eof-object?` _x_)      | (`<` _n1_ _n2_) |
+| (`pair?` _x_)     | (`symbol?` _x_)          | (`=` _n1_ _n2_) |
+| (`null?` _x_)     | (`call/cc` _fun_)        | (`number?` _x_) |
+| (`not` _x_)       | (`apply` _fun_ _arg_)    | (`globals`)     |
+| (`list` _x_ ...)  | (`error` _reason_ _arg_) |                 |
+
+- `(error` _reason_ _arg_`)` signals an error with the message
+  "`Error:` _reason_`:` _arg_".
+  It is based on [SRFI-23](https://srfi.schemers.org/srfi-23/srfi-23.html).
+
+- `(globals)` returns a list of keys of the global environment.
+  It is not in the standard.
 
 
 ## Caveat

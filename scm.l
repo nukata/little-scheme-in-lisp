@@ -1,4 +1,4 @@
-;;; A little Scheme in Common Lisp v0.3.1 R01.12.08/R02.04.05 by SUZUKI Hisao
+;;; A Little Scheme in Common Lisp, v0.4 R01.12.08/R02.04.12 by SUZUKI Hisao
 
 (defconstant +command-line-args+
   (or #+CLISP *args*			; clisp scm.l
@@ -68,9 +68,6 @@
        (__ 'cdr 1 #'cdr)
        (__ 'cons 2 #'cons)
        (__ 'eq? 2 (lambda (x y) (__bool (eq x y))))
-       (__ 'eqv? 2 (lambda (x y) (__bool (if (and (numberp x) (numberp y))
-					     (= x y)
-					   (eql x y)))))
        (__ 'pair? 1 (lambda (x) (__bool (consp x))))
        (__ 'null? 1 (lambda (x) (__bool (null x))))
        (__ 'not 1 (lambda (x) (__bool (eq x :False))))
@@ -84,15 +81,16 @@
        (__ 'symbol? 1 (lambda (x) (__bool (and (symbolp x)
 					       (not (null x))
 					       (not (keywordp x))))))
+       (cons 'call/cc :<call/cc>)
+       (cons 'apply :<apply>)
        (__ '+ 2 #'+)
        (__ '- 2 #'-)
        (__ '* 2 #'*)
        (__ '< 2 (lambda (x y) (__bool (< x y))))
        (__ '= 2 (lambda (x y) (__bool (= x y))))
+       (__ 'number? 1 (lambda (x) (__bool (numberp x))))
        (__ 'error 2 (lambda (x y) (error (format nil "Error: ~:A: ~:S" x y))))
-       (__ 'globals 0 #'globals)
-       (cons 'call/cc 'call/cc)
-       (cons 'apply 'apply)))
+       (__ 'globals 0 #'globals)))
 
 ;;----------------------------------------------------------------------
 
@@ -204,12 +202,12 @@
   "Apply a function FUN to arguments ARG with a continuation K.
    ENV will be referred to push RestoreEnvOp to the continuation."
   (loop named L1 do
-	(cond ((eq FUN 'call/cc)
+	(cond ((eq FUN :<call/cc>)
 	       (push-RestoreEnv ENV K)
 	       (setq FUN (car ARG))
 	       (setq ARG (list (make-Continuation
 				:stack (Continuation-stack K)))))
-	      ((eq FUN 'apply)
+	      ((eq FUN :<apply>)
 	       (setq FUN (car ARG))
 	       (setq ARG (cadr ARG)))
 	      (t
